@@ -53,9 +53,15 @@ Handler createStaticHandler(String fileSystemPath,
         '"$fileSystemPath" could not be found');
   }
 
-
+  Map? _clientHeaderSignature;
   fileSystemPath = rootDir.resolveSymbolicLinksSync();
 
+  setClientHeaderSignature(Map requestHeaders, Map expectedHeaders){
+    _clientHeaderSignature = requestHeaders;
+    for(var key in expectedHeaders.keys ){
+      _clientHeaderSignature!.remove(key);
+    }
+  }
   if (defaultDocument != null) {
     if (defaultDocument != p.basename(defaultDocument)) {
       throw ArgumentError('defaultDocument must be a file name.');
@@ -65,12 +71,26 @@ Handler createStaticHandler(String fileSystemPath,
   final mimeResolver = contentTypeResolver ?? _defaultMimeTypeResolver;
 
   return (Request request) {
+
     if(expectedHeaders!=null) {
-      for (String headerKey in (expectedHeaders.keys)) {
-        if (!request.headers.containsKey(headerKey) ||
-            request.headers[headerKey] != expectedHeaders[headerKey]) {
-          throw ArgumentError('Expected header: ${headerKey} not found');
+      if(_clientHeaderSignature!=null ){
+        for(var key in _clientHeaderSignature!.keys){
+          if(!request.headers.containsKey(key) || request.headers[key]==_clientHeaderSignature![key]){
+            print('unmatched _clientHeaderSignature: $key');
+            throw ArgumentError('Expected _clientHeaderSignature: ${key} not found');
+          }
         }
+        print('matched _clientHeaderSignature');
+      }else{
+        for (String headerKey in (expectedHeaders.keys)) {
+          if (!request.headers.containsKey(headerKey) ||
+              request.headers[headerKey] != expectedHeaders[headerKey]) {
+            print('unmatched headers: $headerKey');
+            throw ArgumentError('Expected header: ${headerKey} not found');
+          }
+        }
+        setClientHeaderSignature(request.headers, expectedHeaders);
+        print('matched headers');
       }
     }
     final segs = [fileSystemPath, ...request.url.pathSegments];
@@ -99,7 +119,6 @@ Handler createStaticHandler(String fileSystemPath,
 
     if (!serveFilesOutsidePath) {
       final resolvedPath = file.resolveSymbolicLinksSync();
-
       // Do not serve a file outside of the original fileSystemPath
       if (!p.isWithin(fileSystemPath, resolvedPath)) {
         return Response.notFound('Not Found');
@@ -130,6 +149,9 @@ Handler createStaticHandler(String fileSystemPath,
     });
   };
 }
+
+
+
 
 Response _redirectToAddTrailingSlash(Uri uri) {
   final location = Uri(
