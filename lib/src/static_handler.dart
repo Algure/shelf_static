@@ -18,6 +18,17 @@ import 'util.dart';
 /// The default resolver for MIME types based on file extensions.
 final _defaultMimeTypeResolver = MimeTypeResolver();
 
+Map? _clientHeaderSignature;
+
+setClientHeaderSignature(Map requestHeaders, Map expectedHeaders){
+  _clientHeaderSignature = {};
+  try {
+    _clientHeaderSignature!['user-agent'] = requestHeaders['user-agent'];
+    _clientHeaderSignature!['host'] = requestHeaders['host'];
+  }catch(e,t){
+    print('client set error: $e, \ntrace: $t');
+  }
+}
 // TODO option to exclude hidden files?
 
 /// Creates a Shelf [Handler] that serves files from the provided
@@ -43,7 +54,7 @@ final _defaultMimeTypeResolver = MimeTypeResolver();
 Handler createStaticHandler(String fileSystemPath,
     {bool serveFilesOutsidePath = false,
     String? defaultDocument,
-    Map<String, dynamic>? expectedHeaders,
+    Map<String, dynamic> expectedHeaders = const {},
     bool listDirectories = false,
     bool useHeaderBytesForContentType = false,
     MimeTypeResolver? contentTypeResolver}) {
@@ -53,15 +64,8 @@ Handler createStaticHandler(String fileSystemPath,
         '"$fileSystemPath" could not be found');
   }
 
-  Map? _clientHeaderSignature;
   fileSystemPath = rootDir.resolveSymbolicLinksSync();
 
-  setClientHeaderSignature(Map requestHeaders, Map expectedHeaders){
-    _clientHeaderSignature = requestHeaders;
-    for(var key in expectedHeaders.keys ){
-      _clientHeaderSignature!.remove(key);
-    }
-  }
   if (defaultDocument != null) {
     if (defaultDocument != p.basename(defaultDocument)) {
       throw ArgumentError('defaultDocument must be a file name.');
@@ -72,26 +76,22 @@ Handler createStaticHandler(String fileSystemPath,
 
   return (Request request) {
 
-    if(expectedHeaders!=null) {
-      if(_clientHeaderSignature!=null ){
-        for(var key in _clientHeaderSignature!.keys){
-          if(!request.headers.containsKey(key) || request.headers[key]==_clientHeaderSignature![key]){
-            print('unmatched _clientHeaderSignature: $key');
-            throw ArgumentError('Expected _clientHeaderSignature: ${key} not found');
-          }
+    if(_clientHeaderSignature!=null ){
+
+      for(var key in _clientHeaderSignature!.keys){
+        if(!request.headers.containsKey(key) || request.headers[key]!=_clientHeaderSignature![key]){
+          throw ArgumentError('Expected _clientHeaderSignature: ${key} not found');
         }
-        print('matched _clientHeaderSignature');
-      }else{
-        for (String headerKey in (expectedHeaders.keys)) {
-          if (!request.headers.containsKey(headerKey) ||
-              request.headers[headerKey] != expectedHeaders[headerKey]) {
-            print('unmatched headers: $headerKey');
-            throw ArgumentError('Expected header: ${headerKey} not found');
-          }
-        }
-        setClientHeaderSignature(request.headers, expectedHeaders);
-        print('matched headers');
       }
+    }else{
+      for (String headerKey in (expectedHeaders.keys)) {
+        // print(' headers: $headerKey, ${request.headers.containsKey(headerKey)} request.headers[headerKey]: ${request.headers[headerKey]==expectedHeaders[headerKey]} ');
+        if (!request.headers.containsKey(headerKey) ||
+            (request.headers[headerKey] != expectedHeaders[headerKey])) {
+          throw ArgumentError('Expected header: ${headerKey} not found');
+        }
+      }
+      setClientHeaderSignature(request.headers, expectedHeaders);
     }
     final segs = [fileSystemPath, ...request.url.pathSegments];
 
