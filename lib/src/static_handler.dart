@@ -23,8 +23,6 @@ Map? _clientHeaderSignature;
 setClientHeaderSignature(Map requestHeaders, Map expectedHeaders){
   _clientHeaderSignature = {};
   try {
-    _clientHeaderSignature!['user-agent'] = requestHeaders['user-agent'];
-    _clientHeaderSignature!['host'] = requestHeaders['host'];
   }catch(e,t){
     print('client set error: $e, \ntrace: $t');
   }
